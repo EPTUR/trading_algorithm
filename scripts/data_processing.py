@@ -2,18 +2,25 @@ import pandas as pd
 import os
 from scripts.config import RAW_DATA_FILE, PROCESSED_DATA_FILE  # Ensure paths are configured correctly
 
-def process_data():
-    """Load, clean, and process electricity trading data from CSV file."""
+def load_and_process_data():
+    """Load and process trading data from the predefined file."""
     # Load raw CSV
     df = pd.read_csv(RAW_DATA_FILE)
 
     # Convert time columns to datetime
-    df["DeliveryStart"] = pd.to_datetime(df["DeliveryStart"], errors='coerce')
-    df["DeliveryEnd"] = pd.to_datetime(df["DeliveryEnd"], errors='coerce')
-    df["ExecutionTime"] = pd.to_datetime(df["ExecutionTime"], errors='coerce')
+    datetime_columns = ['DeliveryStart', 'DeliveryEnd', 'ExecutionTime']
+    for col in datetime_columns:
+        df[col] = pd.to_datetime(df[col], errors='coerce')
 
     # Drop rows with invalid timestamps
-    df = df.dropna(subset=["DeliveryStart", "DeliveryEnd", "ExecutionTime"])
+    df = df.dropna(subset=datetime_columns)
+
+    # Ensure ExecutionTime is timezone-aware if it's not already
+    if df["ExecutionTime"].dt.tz is None:
+        df["ExecutionTime"] = df["ExecutionTime"].dt.tz_localize("UTC", ambiguous="NaT", nonexistent="NaT")
+    else:
+        # If already timezone-aware but not UTC, convert to UTC
+        df["ExecutionTime"] = df["ExecutionTime"].dt.tz_convert("UTC")
 
     # Extract Date from DeliveryStart
     df["Date"] = df["DeliveryStart"].dt.date
@@ -44,17 +51,23 @@ def process_data():
     # Apply function to assign Product Code
     df["Product Code"] = df.apply(lambda row: get_product_code(row["DeliveryEnd"], row["Duration"]), axis=1)
 
-    # Divide Volume by 2 or 4 for HH products(or QH products) or duration 30 minutes(or 15 min
+    # Divide Volume by 2 or 4 for HH products (or QH products) or duration 30 minutes (or 15 min)
     df.loc[(df["Product Code"].str.startswith("HH")) | (df["Duration"] == 30), "Volume"] /= 2
-    #df.loc[(df["Product Code"].str.startswith("QH")) | (df["Duration"] == 15), "Volume"] /= 4
+    # df.loc[(df["Product Code"].str.startswith("QH")) | (df["Duration"] == 15), "Volume"] /= 4
 
     # Save processed file
     df.to_csv(PROCESSED_DATA_FILE, index=False)
     print(f"✅ Processed data saved at {PROCESSED_DATA_FILE}")
+    df = df.drop_duplicates()
+
     return df
+
+
+def process_data():
+    """Processes data and prepares it for trading analysis."""
+    df = load_and_process_data()
+    return df
+
 
 if __name__ == "__main__":
     process_data()
-
-
-

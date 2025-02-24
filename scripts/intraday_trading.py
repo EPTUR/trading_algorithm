@@ -19,7 +19,7 @@ def load_and_process_data():
     # Convert time columns to datetime
     datetime_columns = ['DeliveryStart', 'DeliveryEnd', 'ExecutionTime']
     for col in datetime_columns:
-        df[col] = pd.to_datetime(df[col], errors='coerce')
+        df[col] = pd.to_datetime(df[col], errors='coerce', utc=True)  # Convert to UTC
 
     # Drop rows with invalid timestamps
     df = df.dropna(subset=datetime_columns)
@@ -127,29 +127,53 @@ def find_opportunities_in_window(df, window_start, window_end, volume_target, mi
 
     return None
 
-
 def find_all_trading_opportunities(df, time_window, volume_target, min_spread):
-    """Find all trading opportunities across the entire dataset using rolling time windows."""
-    # Sort by execution time
+    print(f"🔄 Finding trading opportunities for {time_window}...")
+
     df = df.sort_values(by="ExecutionTime")
 
-    # Convert time_window to timedelta
-    window_delta = pd.Timedelta(time_window)
-
-    # Get unique 5-minute windows
-    df["window_start"] = df["ExecutionTime"].dt.floor(time_window)
-    window_starts = df["window_start"].unique()
-
-    all_opportunities = []
-
-    for start in window_starts:
-        window_end = start + window_delta
-        opportunity = find_opportunities_in_window(df, start, window_end, volume_target, min_spread)
+    # Implement rolling window trading logic
+    opportunities = []
+    for window_start in pd.date_range(df["ExecutionTime"].min(), df["ExecutionTime"].max(), freq=time_window):
+        window_end = window_start + pd.Timedelta(time_window)
+        opportunity = find_opportunities_in_window(df, window_start, window_end, volume_target, min_spread)
 
         if opportunity:
-            all_opportunities.append(opportunity)
+            opportunities.append(opportunity)
 
-    return all_opportunities
+    if opportunities:
+        print(f"✅ Found {len(opportunities)} trading opportunities!")
+        save_results(opportunities)  # Ensure results are saved
+    else:
+        print("❌ No trading opportunities found.")
+
+    return opportunities
+
+#def find_all_trading_opportunities(df, time_window, volume_target, min_spread):
+
+   # """Find all trading opportunities across the entire dataset using rolling time windows."""
+    #print(f"🔄 Finding trading opportunities for {time_window}...")
+    # Sort by execution time
+
+    #df = df.sort_values(by="ExecutionTime")
+
+    # Convert time_window to timedelta
+    #window_delta = pd.Timedelta(time_window)
+
+    # Get unique 5-minute windows
+    #df["window_start"] = df["ExecutionTime"].dt.floor(time_window)
+    #window_starts = df["window_start"].unique()
+
+    #all_opportunities = []
+
+    #for start in window_starts:
+       # window_end = start + window_delta
+        #opportunity = find_opportunities_in_window(df, start, window_end, volume_target, min_spread)
+
+       # if opportunity:
+          #  all_opportunities.append(opportunity)
+
+   # return all_opportunities
 
 
 def format_output_dataframe(trades):
@@ -205,6 +229,8 @@ def save_results(opportunities):
 
     df = pd.DataFrame(flattened_data)
     df.to_csv(csv_path, index=False)
+    print(f"📁 Results saved: {json_path}")
+    print(f"📁 Results saved: {csv_path}")
 
 
 def main():
